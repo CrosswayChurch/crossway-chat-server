@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Chat Test</title>
+  <script src="https://crossway-chat-server-production.up.railway.app/socket.io/socket.io.js"></script>
+
+  <script>
+    // Fake login user for testing
+    window.CURRENT_USER = {
+      userId: "1",
+      name: "Test User",
+      email: "test@example.com"   // not a host
+    };
+  </script>
+
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    #messages { border: 1px solid #ccc; height: 250px; overflow-y: scroll; padding: 10px; }
+  </style>
+</head>
+<body>
+  <h2>Chat Test Page</h2>
+
+  <div id="messages"></div>
+
+  <select id="sendTo">
+    <option value="everyone">To Everyone</option>
+    <option value="host">To Host</option>
+  </select>
+
+  <input id="msgInput" type="text" placeholder="Type message…" />
+  <button onclick="sendMessage()">Send</button>
+
+  <script>
+    const socket = io("https://crossway-chat-server-production.up.railway.app");
+
+    socket.on("connect", () => {
+      socket.emit("join", window.CURRENT_USER);
+    });
+
+    socket.on("chatMessage", (msg) => {
+      const div = document.createElement("div");
+      div.textContent = `${msg.from.name} (${msg.to}): ${msg.text}`;
+      document.getElementById("messages").appendChild(div);
+    });
+
+    function sendMessage() {
+      const text = document.getElementById("msgInput").value;
+      const to = document.getElementById("sendTo").value;
+
+      socket.emit("chatMessage", { text, to });
+
+      document.getElementById("msgInput").value = "";
+    }
+  </script>
+</body>
+</html>
