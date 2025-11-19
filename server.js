@@ -4,120 +4,66 @@ import { Server } from "socket.io";
 import cors from "cors";
 
 const app = express();
-
-// Allow only your website(s)
-const allowedOrigins = [
-  "https://www.crossway-fellowship.org",
-  "http://localhost:8000" // local testing
-];
-
-app.use(
-  cors({
-    origin: allowedOrigins,
-    methods: ["GET", "POST"],
-    credentials: true
-  })
-);
+app.use(cors({
+  origin: [
+    "https://www.crossway-fellowship.org", // your real domain
+    "http://localhost:8069"                // dev / Odoo if you use it
+  ],
+  methods: ["GET", "POST"]
+}));
 
 const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*"} });
 
-const io = new Server(server, {
-  cors: {
-    origin: allowedOrigins,
-    methods: ["GET", "POST"]
-  }
-});
-
-// Host emails loaded from Railway env var
-const HOST_EMAILS = (process.env.HOST_EMAILS || "")
-  .split(",")
-  .map((e) => e.trim().toLowerCase())
-  .filter(Boolean);
-
-// Store users
 const users = new Map();
+const chatMessages = [];
+
+const HOST_EMAILS = new Set([
+  "jeff@builtbydesignworks.com",
+  "crosswaymennonite@gmail.com"
+]);
 
 io.on("connection", (socket) => {
-  console.log("Client connected:", socket.id);
+  let user = null;
 
-  socket.on("join", (userInfo) => {
-    const { userId, name, email } = userInfo || {};
+  socket.on("join", (data) => {
+    if (!data || !data.email) return;
 
-    if (!userId || !name || !email) {
-      console.log("Invalid join:", userInfo);
-      return;
-    }
-
-    const normalizedEmail = email.toLowerCase();
-    const isHost = HOST_EMAILS.includes(normalizedEmail);
-
-    const user = {
-      userId: String(userId),
-      name: String(name),
-      email: normalizedEmail,
-      isHost
+    user = {
+      id: data.userId || socket.id,
+      name: data.name || "Guest",
+      email: data.email,
+      isHost: HOST_EMAILS.has(data.email.toLowerCase())
     };
 
     users.set(socket.id, user);
+    console.log("User joined:", user.email);
 
-    console.log("User joined:", user);
-
-    socket.broadcast.emit("userJoined", {
-      userId: user.userId,
-      name: user.name
-    });
+    // send existing messages if you want history
+    chatMessages.forEach((m) => socket.emit("chatMessage", m));
   });
 
   socket.on("chatMessage", (payload) => {
-    const user = users.get(socket.id);
     if (!user) return;
+    const text = (payload?.text || "").trim();
+    if (!text) return;
 
-    const { text, to } = payload || {};
-    const cleanText = String(text || "").trim();
-    if (!cleanText) return;
-
-    const message = {
-      from: {
-        userId: user.userId,
-        name: user.name,
-        email: user.email
-      },
-      text: cleanText,
-      to: to === "host" ? "host" : "everyone",
-      private: to === "host",
-      timestamp: new Date().toISOString()
+    const msg = {
+      from: { name: user.name, email: user.email, isHost: user.isHost },
+      text,
+      ts: Date.now()
     };
 
-    if (message.to === "everyone") {
-      io.emit("chatMessage", message);
-    } else {
-      for (const [sid, u] of users.entries()) {
-        if (u.isHost) io.to(sid).emit("chatMessage", message);
-      }
-      socket.emit("chatMessage", message); // echo to sender
-    }
+    chatMessages.push(msg);
+    io.emit("chatMessage", msg); // broadcast to everyone
   });
 
   socket.on("disconnect", () => {
-    const user = users.get(socket.id);
-    if (user) {
-      console.log("User disconnected:", user);
-      users.delete(socket.id);
-
-      io.emit("userLeft", {
-        userId: user.userId,
-        name: user.name
-      });
-    }
+    users.delete(socket.id);
   });
 });
 
-// Health check
-app.get("/", (req, res) => {
-  res.send("Chat server running.");
-});
-
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () =>
-  console.log(`Chat server listening on port ${PORT}`)
-);
+server.listen(PORT, () => {
+  console.log("Chat server listening on " + PORT);
+});
