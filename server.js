@@ -4,66 +4,65 @@ import { Server } from "socket.io";
 import cors from "cors";
 
 const app = express();
+
+// Allow your site + dev
 app.use(cors({
   origin: [
-    "https://www.crossway-fellowship.org", // your real domain
-    "http://localhost:8069"                // dev / Odoo if you use it
+    "https://www.crossway-fellowship.org",
+    "http://localhost:8069",
+    "http://localhost:8069/"
   ],
   methods: ["GET", "POST"]
 }));
 
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*"} });
+const io = new Server(server, {
+  cors: {
+    origin: "*"
+  }
+});
 
-const users = new Map();
+// In-memory chat history
 const chatMessages = [];
 
-const HOST_EMAILS = new Set([
-  "jeff@builtbydesignworks.com",
-  "crosswaymennonite@gmail.com"
-]);
-
 io.on("connection", (socket) => {
-  let user = null;
+  console.log("Client connected:", socket.id);
 
-  socket.on("join", (data) => {
-    if (!data || !data.email) return;
+  // Send existing messages to the newly connected client
+  chatMessages.forEach((m) => socket.emit("chatMessage", m));
 
-    user = {
-      id: data.userId || socket.id,
-      name: data.name || "Guest",
-      email: data.email,
-      isHost: HOST_EMAILS.has(data.email.toLowerCase())
-    };
-
-    users.set(socket.id, user);
-    console.log("User joined:", user.email);
-
-    // send existing messages if you want history
-    chatMessages.forEach((m) => socket.emit("chatMessage", m));
-  });
-
+  // When a chat message comes in
   socket.on("chatMessage", (payload) => {
-    if (!user) return;
+    const name = (payload?.name || "").trim() || "Anonymous";
     const text = (payload?.text || "").trim();
+
     if (!text) return;
 
     const msg = {
-      from: { name: user.name, email: user.email, isHost: user.isHost },
+      name,
       text,
       ts: Date.now()
     };
 
+    // Save in history (cap to 500 messages so it doesn't grow forever)
     chatMessages.push(msg);
-    io.emit("chatMessage", msg); // broadcast to everyone
+    if (chatMessages.length > 500) chatMessages.shift();
+
+    // Broadcast to everyone
+    io.emit("chatMessage", msg);
   });
 
   socket.on("disconnect", () => {
-    users.delete(socket.id);
+    console.log("Client disconnected:", socket.id);
   });
+});
+
+// Health check route (optional)
+app.get("/", (req, res) => {
+  res.send("Crossway chat server is running.");
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log("Chat server listening on " + PORT);
+  console.log("Chat server listening on port " + PORT);
 });
