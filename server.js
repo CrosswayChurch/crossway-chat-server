@@ -37,30 +37,27 @@ function clearChatHistory(reason = "manual/unknown") {
   io.emit("chatCleared"); // all connected clients can wipe their UI
 }
 
-// ⏰ Schedule automatic weekly reset: Sunday 12:15 PM (server local time)
+// ⏰ Schedule automatic weekly reset: Sunday 12:30 PM (server local time)
 function scheduleWeeklyReset() {
   const now = new Date();
-  const day = now.getDay(); // 0 = Sunday
-  let addDays = (7 - day) % 7; // days until Sunday
 
-  // Next Sunday if already past today's reset time
-  const next = new Date(now);
-  next.setHours(12, 15, 0, 0); // 12:15 PM
+  // Target: Sunday (0) at 12:30
+  const target = new Date(now);
+  target.setHours(12, 30, 0, 0); // 12:30 PM today
+  const todayIsSunday = now.getDay() === 0;
 
-  if (addDays === 0 && now >= next) {
-    // It's Sunday but already past 12:15 → schedule for next week
-    addDays = 7;
+  // If it's not Sunday, or it's Sunday but already past 12:30,
+  // move target to next Sunday.
+  if (!todayIsSunday || now >= target) {
+    const daysUntilNextSunday = (7 - now.getDay()) % 7 || 7;
+    target.setDate(now.getDate() + daysUntilNextSunday);
   }
 
-  if (addDays > 0) {
-    next.setDate(now.getDate() + addDays);
-  }
-
-  const delay = next.getTime() - now.getTime();
+  const delay = target.getTime() - now.getTime();
 
   console.log(
     "Next weekly chat reset scheduled at",
-    next.toISOString(),
+    target.toISOString(),
     "(in",
     Math.round(delay / 1000),
     "seconds)"
