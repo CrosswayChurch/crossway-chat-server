@@ -1,97 +1,75 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Crossway Live Chat</title>
-  <style>
-    body { font-family: Arial; background:#f2f7fa; margin:0; padding:0; }
-    #chatbox {
-      height: 400px; overflow-y:auto; background:white;
-      border:1px solid #ccc; margin:20px; padding:10px; border-radius:6px;
-    }
-    #msgInput { width:70%; padding:10px; font-size:16px; }
-    #sendBtn { padding:10px 20px; font-size:16px; }
+const express = require("express");
+const app = express();
+const http = require("http").createServer(app);
+const io = require("socket.io")(http);
+const fs = require("fs");
+const path = require("path");
 
-    #adminPanel {
-      display:none; background:#eef6ff; padding:20px; margin:20px;
-      border-radius:6px; border:1px solid #b7d6ff;
-    }
-    .adminBtn {
-      padding:10px 18px; font-size:16px; margin:6px;
-      cursor:pointer; background:#3f76ff; color:white; border:none; border-radius:4px;
-    }
-    .resetBtn { background:#d9534f; }
+app.use(express.json());
+app.use(express.static("public"));
 
-    .hostMsg { color:#d9534f; font-weight:bold; }
-  </style>
-</head>
-<body>
+const dataFile = path.join(__dirname, "data/messages.json");
 
-  <h2 style="text-align:center; margin-top:18px;">📡 Crossway Live Chat</h2>
+function loadData() {
+  try { return JSON.parse(fs.readFileSync(dataFile)); }
+  catch { return { messages: [], lastReset: "" }; }
+}
+function saveData(data) {
+  fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
+}
 
-  <!-- CHAT WINDOW -->
-  <div id="chatbox"></div>
+function resetChat() {
+  const data = loadData();
+  data.messages = [];
+  data.lastReset = new Date().toISOString();
+  saveData(data);
+  io.emit("chat-cleared");
+  console.log("CHAT RESET — Manual or Scheduled");
+}
 
-  <!-- Public input -->
-  <div style="text-align:center;">
-    <input id="msgInput" placeholder="Write a message..." />
-    <button id="sendBtn">Send</button>
-  </div>
+io.on("connection", (socket) => {
+  const data = loadData();
+  socket.emit("chat-history", data.messages);
 
-  <br><br><center>
-    <button onclick="toggleAdmin()">🔧 Admin Controls</button>
-  </center>
+  socket.on("chat-message", (msg) => {
+    const data = loadData();
+    data.messages.push(msg);
+    saveData(data);
+    io.emit("chat-message", msg);
+  });
+});
 
-  <!-- ADMIN -->
-  <div id="adminPanel">
-    <h3>Admin Panel</h3>
-    <button class="adminBtn resetBtn" onclick="resetChat()">🧹 Reset Chat</button><br><br>
-    <input id="adminMsg" placeholder="Host message..." style="width:70%; padding:10px;" />
-    <button class="adminBtn" onclick="sendHost()">Send as Host</button>
-  </div>
+app.post("/admin/reset", (req, res) => {
+  resetChat();
+  res.send("Chat Reset");
+});
 
-<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-<script>
-const socket = io();
-const chatbox = document.getElementById("chatbox");
+app.post("/admin/send", (req, res) => {
+  const message = {
+    author: "Host",
+    text: req.body.text,
+    timestamp: Date.now()
+  };
+  const data = loadData();
+  data.messages.push(message);
+  saveData(data);
+  io.emit("chat-message", message);
+  res.send("Host Message Sent");
+});
 
-socket.on("chat-history", msgs => msgs.forEach(addMsg));
-socket.on("chat-message", addMsg);
-socket.on("chat-cleared", ()=> chatbox.innerHTML="");
+setInterval(() => {
+  const now = new Date();
+  const est = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const isSunday = est.getDay() === 0;
+  const is1230 = est.getHours() === 12 && est.getMinutes() === 30;
+  let data = loadData();
+  let last = data.lastReset ? new Date(data.lastReset).getDate() : null;
 
-function addMsg(msg){
-  const div = document.createElement("div");
-  div.style.marginBottom="10px";
-  if(msg.author==="Host"){
-    div.innerHTML=`<span class="hostMsg">Host:</span> ${msg.text}`;
-  } else {
-    div.innerHTML=`<b>${msg.author||"User"}:</b> ${msg.text}`;
+  if (isSunday && is1230 && last !== est.getDate()) {
+    resetChat();
   }
-  chatbox.appendChild(div);
-  chatbox.scrollTop = chatbox.scrollHeight;
-}
+}, 60000);
 
-document.getElementById("sendBtn").onclick = () => {
-  const txt = msgInput.value.trim();
-  if(!txt) return;
-  socket.emit("chat-message",{author:"User", text:txt});
-  msgInput.value="";
-};
-
-function toggleAdmin(){
-  adminPanel.style.display = adminPanel.style.display==="none"?"block":"none";
-}
-function resetChat(){
-  fetch("/admin/reset",{method:"POST"})
-  .then(()=>alert("Chat Reset"));
-}
-function sendHost(){
-  const txt = adminMsg.value.trim();
-  if(!txt) return alert("Enter a message");
-  fetch("/admin/send",{
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({text:txt})
-  }).then(()=>{ alert("Sent as Host"); adminMsg.value=""; });
-}
-</script>
-</body>
-</html>
+http.listen(process.env.PORT || 3000, () =>
+  console.log("Chat server running")
+);
