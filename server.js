@@ -1,125 +1,82 @@
-import express from "express";
-import http from "http";
-import { Server } from "socket.io";
-import cors from "cors";
-
+const express = require("express");
 const app = express();
+const http = require("http").createServer(app);
+const io = require("socket.io")(http);
+const fs = require("fs");
+const path = require("path");
 
-// 🔑 Change this to something only you know, or set as an env var in Railway
-const CLEAR_KEY = process.env.CHAT_CLEAR_KEY || "CHANGE_THIS_KEY";
+app.use(express.json());
+app.use(express.static("public")); // chat.html + admin.html
 
-// Allow your site + dev
-app.use(
-  cors({
-    origin: [
-      "https://www.crossway-fellowship.org",
-      "http://localhost:8069",
-      "http://localhost:8069/"
-    ],
-    methods: ["GET", "POST"]
-  })
-);
+// ====== Data Storage ======
+const dataFile = path.join(__dirname, "data/messages.json");
 
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: "*"
-  }
-});
-
-// In-memory chat history
-const chatMessages = [];
-
-// 🧹 Helper: clear messages and notify clients
-function clearChatHistory(reason = "manual/unknown") {
-  chatMessages.length = 0;
-  console.log(`Chat history cleared (${reason}) at`, new Date().toISOString());
-  io.emit("chatCleared"); // all connected clients can wipe their UI
+function loadData() {
+  try { return JSON.parse(fs.readFileSync(dataFile)); }
+  catch { return { messages: [], lastReset: "" }; }
+}
+function saveData(data) {
+  fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
 }
 
-// ⏰ Schedule automatic weekly reset: Sunday 12:30 PM (server local time)
-function scheduleWeeklyReset() {
-  const now = new Date();
-
-  // Target: Sunday (0) at 12:30
-  const target = new Date(now);
-  target.setHours(12, 30, 0, 0); // 12:30 PM today
-  const todayIsSunday = now.getDay() === 0;
-
-  // If it's not Sunday, or it's Sunday but already past 12:30,
-  // move target to next Sunday.
-  if (!todayIsSunday || now >= target) {
-    const daysUntilNextSunday = (7 - now.getDay()) % 7 || 7;
-    target.setDate(now.getDate() + daysUntilNextSunday);
-  }
-
-  const delay = target.getTime() - now.getTime();
-
-  console.log(
-    "Next weekly chat reset scheduled at",
-    target.toISOString(),
-    "(in",
-    Math.round(delay / 1000),
-    "seconds)"
-  );
-
-  setTimeout(() => {
-    clearChatHistory("weekly");
-    // Schedule the next reset again
-    scheduleWeeklyReset();
-  }, delay);
+function resetChat() {
+  const data = loadData();
+  data.messages = [];
+  data.lastReset = new Date().toISOString();
+  saveData(data);
+  io.emit("chat-cleared");
+  console.log("CHAT RESET — Manual or Scheduled");
 }
 
+// ====== SOCKET ======
 io.on("connection", (socket) => {
-  console.log("Client connected:", socket.id);
+  const data = loadData();
+  socket.emit("chat-history", data.messages);
 
-  // Send existing messages to the newly connected client
-  chatMessages.forEach((m) => socket.emit("chatMessage", m));
-
-  // When a chat message comes in
-  socket.on("chatMessage", (payload) => {
-    const name = (payload?.name || "").trim() || "Anonymous";
-    const text = (payload?.text || "").trim();
-
-    if (!text) return;
-
-    const msg = {
-      name,
-      text,
-      ts: Date.now()
-    };
-
-    // Save in history (cap to 500 messages so it doesn't grow forever)
-    chatMessages.push(msg);
-    if (chatMessages.length > 500) chatMessages.shift();
-
-    // Broadcast to everyone
-    io.emit("chatMessage", msg);
-  });
-
-  socket.on("disconnect", () => {
-    console.log("Client disconnected:", socket.id);
+  socket.on("chat-message", (msg) => {
+    const data = loadData();
+    data.messages.push(msg);
+    saveData(data);
+    io.emit("chat-message", msg);
   });
 });
 
-// 🌐 Health check route (optional)
-app.get("/", (req, res) => {
-  res.send("Crossway chat server is running.");
+// ====== Admin API ======
+app.post("/admin/reset", (req, res) => {
+  resetChat();
+  res.send("Chat Reset");
 });
 
-// 🌐 Manual clear endpoint (you call this yourself)
-app.all("/admin/clear-chat", (req, res) => {
-  const key = req.query.key;
-  if (key !== CLEAR_KEY) {
-    return res.status(403).json({ error: "Forbidden" });
+app.post("/admin/send", (req, res) => {
+  const message = {
+    author: "Host",
+    text: req.body.text,
+    timestamp: Date.now()
+  };
+  const data = loadData();
+  data.messages.push(message);
+  saveData(data);
+  io.emit("chat-message", message);
+  res.send("Host Message Sent");
+});
+
+// ====== Auto Weekly Reset (EVERY SUNDAY 12:30 PM EST) ======
+setInterval(() => {
+  const now = new Date();
+  const est = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+
+  const isSunday = est.getDay() === 0;
+  const is1230 = est.getHours() === 12 && est.getMinutes() === 30;
+
+  let data = loadData();
+  let last = data.lastReset ? new Date(data.lastReset).getDate() : null;
+
+  if (isSunday && is1230 && last !== est.getDate()) {
+    resetChat();
   }
-  clearChatHistory("manual");
-  res.json({ ok: true });
-});
+}, 60000);
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log("Chat server listening on port " + PORT);
-  // Start the weekly reset timer
-  scheduleWeeklyReset();
-});
+// ====== Start Server ======
+http.listen(process.env.PORT || 3000, () =>
+  console.log("Chat server running")
+);
