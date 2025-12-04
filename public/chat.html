@@ -1,123 +1,176 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Crossway Live Chat</title>
-  <style>
-    body { font-family: Arial; background:#f2f7fa; margin:0; padding:0; }
-    #chatbox {
-      height: 400px; overflow-y: auto; background:white;
-      border:1px solid #ccc; margin:20px; padding:10px; border-radius:6px;
-    }
-    #msgInput { width:70%; padding:10px; font-size:16px; }
-    #sendBtn { padding:10px 20px; font-size:16px; }
+<title>Crossway Live Chat</title>
 
-    /* ===== ADMIN PANEL ===== */
-    #adminPanel {
-      display:none; background:#eef6ff; padding:20px; margin:20px;
-      border-radius:6px; border:1px solid #b7d6ff;
-    }
-    .adminBtn {
-      padding:10px 18px; font-size:16px; margin:6px;
-      cursor:pointer; background:#3f76ff; color:white; border:none; border-radius:4px;
-    }
-    .resetBtn {
-      background:#d9534f;
-    }
-  </style>
+<style>
+body{
+  font-family: system-ui, sans-serif;
+  background:#f7fafc;
+  margin:0; padding:0;
+}
+
+/* Header Theme */
+#header{
+  background:#6E8C95;
+  color:white;
+  text-align:center;
+  padding:16px;
+  font-size:22px;
+  font-weight:600;
+}
+
+/* Chat Window */
+#chatbox{
+  width:90%;
+  max-width:700px;
+  height:400px;
+  overflow-y:auto;
+  background:white;
+  margin:25px auto 10px;
+  border-radius:8px;
+  box-shadow:0 2px 10px rgba(0,0,0,0.07);
+  padding:15px;
+  font-size:17px;
+}
+
+.msg{ margin-bottom:10px; }
+.host{ font-weight:bold; color:#C44C47; }
+.user{ font-weight:bold; color:#4a4a4a; }
+
+/* Input section */
+#sendWrap{
+  text-align:center;
+}
+#msgInput{
+  width:65%; padding:10px; font-size:17px;
+  border-radius:6px; border:1px solid #ccc;
+}
+#sendBtn{
+  padding:10px 20px; font-size:17px; margin-left:6px;
+  background:#6E8C95; color:white; border:none; border-radius:6px;
+  cursor:pointer;
+}
+
+/* Admin toggle button */
+#adminToggle{
+  margin-top:15px;
+  background:#4F89D4;
+  color:white;
+  border:none;
+  padding:10px 18px;
+  font-size:16px;
+  cursor:pointer;
+  border-radius:6px;
+}
+
+/* Admin panel */
+#adminPanel{
+  display:none;
+  width:90%;
+  max-width:700px;
+  margin:20px auto;
+  background:#eef6ff;
+  padding:20px;
+  border-radius:8px;
+  border:1px solid #bcd6ff;
+}
+
+/* Admin only buttons */
+#hostInput{
+  width:70%; padding:10px; font-size:17px;
+  border:1px solid #ccc; border-radius:6px;
+}
+#sendHost{
+  padding:10px 18px; margin-left:5px;
+  background:#4F89D4; color:white; border:none; border-radius:6px;
+}
+#resetChat{
+  margin-top:10px;
+  background:#C44C47;
+  color:white; border:none; border-radius:6px;
+  padding:10px 20px; display:block;
+  cursor:pointer;
+}
+</style>
 </head>
+
 <body>
 
-  <h2 style="text-align:center; margin-top:18px;">📡 Crossway Live Chat</h2>
+<div id="header">📡 Crossway Live Chat</div>
 
-  <div id="chatbox"></div>
+<div id="chatbox"></div>
 
-  <!-- Public Send -->
-  <div style="text-align:center;">
-    <input id="msgInput" placeholder="Write a message..." />
-    <button id="sendBtn">Send</button>
-  </div>
+<div id="sendWrap">
+  <input id="msgInput" placeholder="Write a message...">
+  <button id="sendBtn">Send</button>
+</div>
 
-  <br><br>
+<center>
+  <button id="adminToggle">🔧 Host Controls</button>
+</center>
 
-  <!-- Toggle Admin -->
-  <center>
-    <button onclick="toggleAdmin()">🔧 Admin Controls</button>
-  </center>
+<!-- ADMIN INSIDE SAME PAGE -->
+<div id="adminPanel">
+  <h3>Host Panel</h3>
 
-  <!-- ADMIN SECTION -->
-  <div id="adminPanel">
+  <input id="hostInput" placeholder="Host message...">
+  <button id="sendHost">Send as Host</button>
 
-    <h3>Admin Panel</h3>
-
-    <button class="adminBtn resetBtn" onclick="resetChat()">🧹 Reset Chat</button><br><br>
-
-    <input id="adminMsg" placeholder="Host message..." style="width:70%; padding:10px;" />
-    <button class="adminBtn" onclick="sendHost()">Send as Host</button>
-
-  </div>
+  <button id="resetChat">🧹 Reset Chat</button>
+</div>
 
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 <script>
 const socket = io();
 const chatbox = document.getElementById("chatbox");
 
-// Load message history
+// Load history
 socket.on("chat-history", msgs => msgs.forEach(addMsg));
-
-// Display new messages live
 socket.on("chat-message", addMsg);
+socket.on("chat-cleared", ()=> chatbox.innerHTML="");
 
-socket.on("chat-cleared", ()=>{
-  chatbox.innerHTML = "";
-});
-
-// Push to DOM
+// Render messages
 function addMsg(msg){
-  const div = document.createElement("div");
-  div.style.marginBottom = "10px";
-
-  if(msg.author === "Host"){
-    div.innerHTML = `<b style="color:#d9534f;">Host:</b> ${msg.text}`;
+  let div=document.createElement("div");
+  div.className="msg";
+  if(msg.author==="Host"){
+    div.innerHTML=`<span class="host">HOST:</span> ${msg.text}`;
   } else {
-    div.innerHTML = `<b>${msg.author || "User"}:</b> ${msg.text}`;
+    div.innerHTML=`<span class="user">User:</span> ${msg.text}`;
   }
-
   chatbox.appendChild(div);
-  chatbox.scrollTop = chatbox.scrollHeight;
+  chatbox.scrollTop=chatbox.scrollHeight;
 }
 
 // Public send
-document.getElementById("sendBtn").onclick = ()=>{
-  const text = msgInput.value.trim();
+sendBtn.onclick=()=>{
+  const text=msgInput.value.trim();
   if(!text) return;
-  socket.emit("chat-message",{author:"User", text});
+  socket.emit("chat-message",{author:"User",text});
   msgInput.value="";
 };
 
-// ===== ADMIN FUNCTIONS =====
-function toggleAdmin(){
-  const panel = document.getElementById("adminPanel");
-  panel.style.display = panel.style.display === "none" ? "block" : "none";
-}
+// ADMIN PANEL toggle
+adminToggle.onclick=()=>{
+  adminPanel.style.display = adminPanel.style.display==="none"?"block":"none";
+};
 
-function resetChat(){
-  fetch("/admin/reset",{method:"POST"})
-  .then(()=>alert("Chat Reset"));
-}
-
-function sendHost(){
-  const text = adminMsg.value.trim();
-  if(!text) return alert("Enter a message");
-  
+// Always send as HOST
+sendHost.onclick=()=>{
+  const text=hostInput.value.trim();
+  if(!text) return;
   fetch("/admin/send",{
     method:"POST",
-    headers:{"Content-Type":"application/json"},
+    headers:{ "Content-Type":"application/json" },
     body:JSON.stringify({text})
-  }).then(()=>{
-    alert("Sent as Host");
-    adminMsg.value="";
-  });
-}
+  }).then(()=>hostInput.value="");
+};
+
+// Reset chat
+resetChat.onclick=()=>fetch("/admin/reset",{method:"POST"})
+  .then(()=>chatbox.innerHTML="");
 </script>
+
 </body>
 </html>
