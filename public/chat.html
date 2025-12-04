@@ -1,136 +1,175 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Crossway Live Chat - HOST PANEL</title>
+<title>Crossway Live Chat</title>
 
 <style>
-body {
+body{
   font-family: system-ui, sans-serif;
-  background:#f1f6f8;
+  background:#ECF3F5;
   margin:0; padding:0;
   text-align:center;
 }
 
-/* HEADER */
-#header {
+/* Header + Logo */
+#header{
   background:#6E8C95;
-  padding:18px;
+  padding:20px;
   color:white;
   font-size:26px;
   font-weight:700;
   display:flex;
   align-items:center;
   justify-content:center;
-  gap:10px;
+  gap:12px;
 }
-#header img {
-  height:45px;
+#header img{
+  height:43px;
 }
 
-/* CHAT VIEW */
+/* CHAT WINDOW */
 #chatbox{
   width:90%;
-  max-width:800px;
-  height:420px;
+  max-width:850px;
+  height:450px;
   overflow-y:auto;
-  margin:25px auto;
-  background:white;
-  border-radius:10px;
-  padding:18px;
+  margin:30px auto;
+  background:#ffffff;
+  border-radius:14px;
+  padding:25px;
   font-size:18px;
-  box-shadow:0 4px 18px rgba(0,0,0,0.08);
+  box-shadow:0 6px 25px rgba(0,0,0,0.08);
 }
 
-/* MESSAGE RENDER */
-.msg{margin-bottom:12px;text-align:left;}
-.host { font-weight:bold;color:#b3342e; }
+/* CHAT BUBBLES */
+.bubble{
+  display:inline-block;
+  padding:12px 16px;
+  margin-bottom:14px;
+  border-radius:10px;
+  max-width:80%;
+  line-height:1.35;
+}
 
-/* HOST SENDER INPUT */
+/* HOST message bubble */
+.hostBubble{
+  background:#6E8C95;
+  color:white;
+  text-align:right;
+  margin-left:auto;
+}
+
+/* FUTURE viewer bubble example (if viewers exist later) */
+.userBubble{
+  background:#DCE5EB;
+  color:#2b2b2b;
+  text-align:left;
+  margin-right:auto;
+}
+
+/* HOST SENDER AREA */
 #hostControls{
   width:90%;
-  max-width:800px;
-  margin:20px auto;
-  padding:22px;
-  background:#e7f0f9;
-  border-radius:10px;
-  border:1px solid #cfe2fc;
-  box-shadow:0 2px 10px rgba(0,0,0,0.05);
+  max-width:850px;
+  margin:10px auto 40px;
+  padding:25px;
+  background:#E6EEF6;
+  border-radius:12px;
+  border:1px solid #C4D7EA;
+  box-shadow:0 3px 18px rgba(0,0,0,0.05);
+  display:flex;
+  gap:10px;
+  align-items:center;
+  justify-content:center;
 }
 
+/* Crossway Blue */
+#sendHost{
+  background:#4A6E9B; /* <-- Crossway theme blue */
+  color:white;
+}
+#resetChat{
+  background:#BF3D34;
+  color:white;
+}
+
+/* Input box */
 #hostInput{
-  width:70%;
-  padding:12px;
-  font-size:17px;
-  border-radius:6px;
-  border:1px solid #bbb;
+  flex:1;
+  padding:14px;
+  font-size:18px;
+  border-radius:8px;
+  border:1px solid #A9BCCF;
 }
 
 button{
   cursor:pointer;
   border:none;
-  border-radius:6px;
-  font-size:17px;
-  padding:12px 22px;
-  color:white;
+  border-radius:8px;
+  font-size:18px;
+  padding:14px 28px;
+  transition:.2s;
 }
-
-#sendHost { background:#4F89D4; }
-#resetChat { background:#C44C47; margin-left:10px; }
-
+button:hover{
+  opacity:.88;
+}
 </style>
 </head>
 
+
 <body>
 
-<!-- Header w/ Logo -->
 <div id="header">
-  <img src="https://i.postimg.cc/QNm4rLDw/crossway-logo.png">
-  Crossway Live Chat (HOST ONLY)
+  <img src="https://i.postimg.cc/zDc7F1Xf/Crossway-Logo.png">
+  Crossway Live Chat
 </div>
 
-<!-- Chat window -->
 <div id="chatbox"></div>
 
-<!-- HOST ONLY CONTROLS ALWAYS VISIBLE -->
+<!-- Always visible host controls -->
 <div id="hostControls">
-  <input id="hostInput" placeholder="Type a message as HOST...">
-  <button id="sendHost">Send as HOST</button>
+  <input id="hostInput" placeholder="Type a message...">
+  <button id="sendHost">Send</button>
   <button id="resetChat">🧹 Reset Chat</button>
 </div>
+
 
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 <script>
 const socket = io();
 const chatbox = document.getElementById("chatbox");
 
-// load history
+// Load history
 socket.on("chat-history", msgs => msgs.forEach(addMsg));
 socket.on("chat-message", addMsg);
-socket.on("chat-cleared", ()=> chatbox.innerHTML="");
+socket.on("chat-cleared", ()=>chatbox.innerHTML="");
 
-// render messages
+// Render chat bubble
 function addMsg(msg){
-  const div=document.createElement("div");
-  div.className="msg";
-  div.innerHTML=`<span class="host">HOST:</span> ${msg.text}`;
+  const div = document.createElement("div");
+
+  // Host messages only (viewer bubbles ready for future public)
+  div.className = "bubble hostBubble";
+  div.innerHTML = msg.text;
+
   chatbox.appendChild(div);
-  chatbox.scrollTop=chatbox.scrollHeight;
+  chatbox.scrollTop = chatbox.scrollHeight;
 }
 
-// send HOST ONLY messages
-sendHost.onclick=()=>{
-  const txt=hostInput.value.trim();
-  if(!txt) return;
+// SEND AS HOST ONLY
+sendHost.onclick = ()=>{
+  const text = hostInput.value.trim();
+  if(!text) return;
 
   fetch("/admin/send",{
     method:"POST",
     headers:{ "Content-Type":"application/json" },
-    body:JSON.stringify({text:txt})
+    body:JSON.stringify({text})
   }).then(()=> hostInput.value="");
 };
 
-// reset chat
-resetChat.onclick=()=>fetch("/admin/reset",{method:"POST"})
+// Reset chat
+resetChat.onclick = ()=> fetch("/admin/reset",{method:"POST"})
   .then(()=> chatbox.innerHTML="");
 </script>
 
