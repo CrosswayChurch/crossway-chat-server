@@ -11,89 +11,76 @@ body{
   text-align:center;
 }
 
-/* Header + Logo */
+/* Header */
 #header{
   background:#6E8C95;
-  padding:20px;
+  padding:22px;
   color:white;
   font-size:26px;
   font-weight:700;
   display:flex;
   align-items:center;
   justify-content:center;
-  gap:12px;
+  gap:16px;
+  box-shadow:0 3px 8px rgba(0,0,0,0.18);
 }
 #header img{
-  height:43px;
+  height:70px; /* Bigger logo */
+  filter: drop-shadow(0px 2px 3px rgba(0,0,0,0.35));
 }
 
-/* CHAT WINDOW */
+/* Chat Window */
 #chatbox{
   width:90%;
-  max-width:850px;
-  height:450px;
+  max-width:900px;
+  height:500px;
   overflow-y:auto;
-  margin:30px auto;
-  background:#ffffff;
+  margin:35px auto;
+  background:white;
   border-radius:14px;
   padding:25px;
-  font-size:18px;
+  font-size:19px;
   box-shadow:0 6px 25px rgba(0,0,0,0.08);
 }
 
-/* CHAT BUBBLES */
+/* Chat Bubbles */
 .bubble{
-  display:inline-block;
-  padding:12px 16px;
+  display:block;
+  padding:12px 18px;
   margin-bottom:14px;
   border-radius:10px;
-  max-width:80%;
-  line-height:1.35;
-}
-
-/* HOST message bubble */
-.hostBubble{
-  background:#6E8C95;
+  max-width:85%;
+  line-height:1.4;
+  animation:fadeIn .25s ease-out;
+  background:#4A6E9B; 
   color:white;
-  text-align:right;
   margin-left:auto;
+  text-align:right;
+  border-bottom-right-radius:3px;
 }
 
-/* FUTURE viewer bubble example (if viewers exist later) */
-.userBubble{
-  background:#DCE5EB;
-  color:#2b2b2b;
-  text-align:left;
-  margin-right:auto;
+/* Fade in animation */
+@keyframes fadeIn{
+  from{opacity:0; transform:translateY(5px);}
+  to{opacity:1; transform:translateY(0);}
 }
 
-/* HOST SENDER AREA */
+/* Host Controls */
 #hostControls{
   width:90%;
-  max-width:850px;
-  margin:10px auto 40px;
+  max-width:900px;
+  margin:20px auto 50px;
   padding:25px;
   background:#E6EEF6;
   border-radius:12px;
   border:1px solid #C4D7EA;
   box-shadow:0 3px 18px rgba(0,0,0,0.05);
   display:flex;
-  gap:10px;
+  gap:12px;
   align-items:center;
   justify-content:center;
 }
 
-/* Crossway Blue */
-#sendHost{
-  background:#4A6E9B; /* <-- Crossway theme blue */
-  color:white;
-}
-#resetChat{
-  background:#BF3D34;
-  color:white;
-}
-
-/* Input box */
 #hostInput{
   flex:1;
   padding:14px;
@@ -109,30 +96,32 @@ button{
   font-size:18px;
   padding:14px 28px;
   transition:.2s;
+  font-weight:600;
 }
-button:hover{
-  opacity:.88;
-}
+
+#sendHost{ background:#4A6E9B; color:white; }
+#sendHost:hover{ background:#3A587C; }
+
+#resetChat{ background:#BF3D34; color:white; }
+#resetChat:hover{ background:#9E332C; }
+
 </style>
 </head>
-
 
 <body>
 
 <div id="header">
   <img src="https://i.postimg.cc/zDc7F1Xf/Crossway-Logo.png">
-  Crossway Live Chat
+  Live Chat Panel
 </div>
 
 <div id="chatbox"></div>
 
-<!-- Always visible host controls -->
 <div id="hostControls">
   <input id="hostInput" placeholder="Type a message...">
   <button id="sendHost">Send</button>
   <button id="resetChat">🧹 Reset Chat</button>
 </div>
-
 
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 <script>
@@ -142,35 +131,28 @@ const chatbox = document.getElementById("chatbox");
 // Load history
 socket.on("chat-history", msgs => msgs.forEach(addMsg));
 socket.on("chat-message", addMsg);
-socket.on("chat-cleared", ()=>chatbox.innerHTML="");
+socket.on("chat-cleared", ()=> chatbox.innerHTML="");
 
-// Render chat bubble
+// Render bubble
 function addMsg(msg){
   const div = document.createElement("div");
-
-  // Host messages only (viewer bubbles ready for future public)
-  div.className = "bubble hostBubble";
-  div.innerHTML = msg.text;
-
+  div.className = "bubble";
+  div.textContent = msg.text;
   chatbox.appendChild(div);
   chatbox.scrollTop = chatbox.scrollHeight;
 }
 
-// SEND AS HOST ONLY
+// Send instantly with socket
 sendHost.onclick = ()=>{
   const text = hostInput.value.trim();
   if(!text) return;
-
-  fetch("/admin/send",{
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body:JSON.stringify({text})
-  }).then(()=> hostInput.value="");
+  addMsg({text});
+  socket.emit("host-message",{text});
+  hostInput.value="";
 };
 
 // Reset chat
-resetChat.onclick = ()=> fetch("/admin/reset",{method:"POST"})
-  .then(()=> chatbox.innerHTML="");
+resetChat.onclick = ()=> socket.emit("reset-chat");
 </script>
 
 </body>
